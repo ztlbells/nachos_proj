@@ -22,8 +22,11 @@ public class FifoQueue extends ThreadQueue {
 	    Lib.assertTrue(Machine.interrupt().disabled());
 		       
 	    waitQueue.add(thread);
+	    //reset timeslice
+	    thread.setTimeSlice(this.timeSlice);
+	    
 	}
-
+	
 	/**
 	 * Remove a thread from the beginning of the queue.
 	 *
@@ -40,6 +43,10 @@ public class FifoQueue extends ThreadQueue {
 	    return (KThread) waitQueue.removeFirst();
 	}
 
+	public void removeHead(){
+		if (!waitQueue.isEmpty())
+			waitQueue.removeFirst();
+	}
 	/**
 	 * The specified thread has received exclusive access, without using
 	 * <tt>waitForAccess()</tt> or <tt>nextThread()</tt>. Assert that no
@@ -64,6 +71,13 @@ public class FifoQueue extends ThreadQueue {
 
 	    for (Iterator i=waitQueue.iterator(); i.hasNext(); )
 		System.out.print((KThread) i.next() + " ");
+		if(waitQueue.isEmpty())
+			System.out.print("null");
+		System.out.print("\n");
+	}
+	
+	public KThread waitQueueHead(){
+		return  waitQueue.get(0);
 	}
 
 	private LinkedList<KThread> waitQueue = new LinkedList<KThread>();
@@ -88,7 +102,7 @@ public class FifoQueue extends ThreadQueue {
 	 */
 	
 	public void initializer(int priority){
+		this.priority=priority;
 		this.timeSlice=(priority+1)*Stats.KernelTick;
-		//System.out.println("timeslice="+this.timeSlice);
 	}
 }

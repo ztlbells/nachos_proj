@@ -35,6 +35,7 @@ public final class Stats {
      * The total amount of simulated time that has passed since Nachos
      * started.
      */
+    
     public long totalTicks = 0;
     /**
      * The total amount of simulated time that Nachos has spent in kernel mode.
@@ -92,7 +93,7 @@ public final class Stats {
     /**
      * The mean amount of simulated time between timer interrupts.
      */
-    public static final int TimerTicks = 500;
+    public static final int TimerTicks = 200;
     /**
      * The amount of simulated time required for an elevator to move a floor.
      */

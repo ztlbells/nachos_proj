@@ -2,6 +2,8 @@ package nachos.threads;
 
 import java.util.LinkedList;
 import nachos.machine.*;
+import nachos.security.*;
+import nachos.threads.KThread;
 
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
@@ -48,7 +50,10 @@ public class Alarm {
     			timerList.remove(i);
     		}
     	}*/
+    	KThread.newSelfTest();
     	KThread.yield();
+
+    		
 	
     }
 

@@ -157,7 +157,6 @@ public final class TCB {
 
 	TCB previous = currentTCB;
 	previous.running = false;
-	
 	this.interrupt();
 	previous.yield();
     }
@@ -209,6 +208,7 @@ public final class TCB {
 
     private void threadroot() {
 	// this should be running the current thread
+   
 	Lib.assertTrue(javaThread == Thread.currentThread());
 
 	if (!isFirstTCB) {
@@ -218,15 +218,16 @@ public final class TCB {
 	     * sleep. All we have to do is wake up the current TCB and then
 	     * wait to get woken up by contextSwitch() or destroy().
 	     */
-	    
+
 	    currentTCB.interrupt();
+
 	    this.yield();
 	}
 	else {
 	    /* start() called us directly, so we just need to initialize
 	     * a couple things.
 	     */
-	    
+		System.out.println("isFirstTCB");
 	    currentTCB = this;
 	    running = true;
 	}
@@ -240,7 +241,6 @@ public final class TCB {
 	catch (ThreadDeath e) {
 	    // make sure this TCB is being destroyed properly
 	    if (!done) {
-		System.out.print("\nTCB terminated improperly!\n");
 		privilege.exit(1);
 	    }
 
@@ -288,6 +288,7 @@ public final class TCB {
      * is updated by <tt>contextSwitch()</tt> before we get called.
      */
     private synchronized void waitForInterrupt() {
+    	int i=0;
 	while (!running) {
 	    try { wait(); }
 	    catch (InterruptedException e) { }

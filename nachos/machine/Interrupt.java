@@ -62,6 +62,7 @@ public final class Interrupt {
      * <tt>setStatus(true)</tt>.
      */    
     public void enable() {
+    	
 	setStatus(true);
     }
 
@@ -82,6 +83,7 @@ public final class Interrupt {
      * @param	status	<tt>true</tt> to enable interrupts.
      */
     public void restore(boolean status) {
+    	
 	setStatus(status);
     }
 
@@ -98,7 +100,7 @@ public final class Interrupt {
 	enabled = status;
 	
 	if (oldStatus == false && status == true){
-		//System.out.println("->setStatus");
+		
 	    tick(true);}
 
 	return oldStatus;
@@ -136,19 +138,19 @@ public final class Interrupt {
     }
 
     //TODO:tick
-    private void tick(boolean inKernelMode) {
+    public void tick(boolean inKernelMode) {
 	Stats stats = privilege.stats;
 
 	if (inKernelMode) {
 	    stats.kernelTicks += Stats.KernelTick;
 	    stats.totalTicks += Stats.KernelTick;
+	    
 	    KThread.currentThread.subTimeSlice();
 	    System.out.println("== TICK "+stats.totalTicks+" ==");
 	}
 	else {
 	    stats.userTicks += Stats.UserTick;
 	    stats.totalTicks += Stats.UserTick;
-	    //System.out.println("===inUserlMode~:totalTicks="+stats.totalTicks+"===");
 	}
 
 	if (Lib.test(dbgInt))
@@ -163,25 +165,25 @@ public final class Interrupt {
 	long time = privilege.stats.totalTicks;
 
 	Lib.assertTrue(disabled());
-
 	if (Lib.test(dbgInt))
 	    print();
 
 	if (pending.isEmpty())
 	    return;
-
+	
+	/*System.out.println("((PendingInterrupt) pending.first()).time="+((PendingInterrupt) pending.first()).time);
+	System.out.println("time="+time);*/
+	
 	if (((PendingInterrupt) pending.first()).time > time)
 	    return;
 
 	Lib.debug(dbgInt, "Invoking interrupt handlers at time = " + time);
-	
+
 	while (!pending.isEmpty() &&
 	       ((PendingInterrupt) pending.first()).time <= time) {
 	    PendingInterrupt next = (PendingInterrupt) pending.first();
 	    pending.remove(next);
-
 	    Lib.assertTrue(next.time <= time);
-
 	    if (privilege.processor != null)
 		privilege.processor.flushPipe();
 

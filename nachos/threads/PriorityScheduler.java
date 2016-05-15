@@ -48,57 +48,6 @@ public class PriorityScheduler extends Scheduler {
 	return new PriorityQueue(transferPriority);
     }
 
-    public int getPriority(KThread thread) {
-	Lib.assertTrue(Machine.interrupt().disabled());
-		       
-	return getThreadState(thread).getPriority();
-    }
-
-    public int getEffectivePriority(KThread thread) {
-	Lib.assertTrue(Machine.interrupt().disabled());
-		       
-	return getThreadState(thread).getEffectivePriority();
-    }
-
-    public void setPriority(KThread thread, int priority) {
-	Lib.assertTrue(Machine.interrupt().disabled());
-		       
-	Lib.assertTrue(priority >= priorityMinimum &&
-		   priority <= priorityMaximum);
-	
-	getThreadState(thread).setPriority(priority);
-    }
-
-    public boolean increasePriority() {
-	boolean intStatus = Machine.interrupt().disable();
-		       
-	KThread thread = KThread.currentThread();
-
-	int priority = getPriority(thread);
-	if (priority == priorityMaximum)
-	    return false;
-
-	setPriority(thread, priority+1);
-
-	Machine.interrupt().restore(intStatus);
-	return true;
-    }
-
-    public boolean decreasePriority() {
-	boolean intStatus = Machine.interrupt().disable();
-		       
-	KThread thread = KThread.currentThread();
-
-	int priority = getPriority(thread);
-	if (priority == priorityMinimum)
-	    return false;
-
-	setPriority(thread, priority-1);
-
-	Machine.interrupt().restore(intStatus);
-	return true;
-    }
-
     /**
      * The default priority for a new thread. Do not change this value.
      */
@@ -111,19 +60,14 @@ public class PriorityScheduler extends Scheduler {
      * The maximum priority that a thread can have. Do not change this value.
      */
     public static final int priorityMaximum = 7;    
-
+    
+    
     /**
      * Return the scheduling state of the specified thread.
      *
      * @param	thread	the thread whose scheduling state to return.
      * @return	the scheduling state of the specified thread.
      */
-    protected ThreadState getThreadState(KThread thread) {
-	if (thread.schedulingState == null)
-	    thread.schedulingState = new ThreadState(thread);
-
-	return (ThreadState) thread.schedulingState;
-    }
 
     /**
      * A <tt>ThreadQueue</tt> that sorts threads by priority.
@@ -134,27 +78,75 @@ public class PriorityScheduler extends Scheduler {
 	    //create subPriorityQueue for each priority (range of priority:0~7)
 	    for(int i=0;i<=7;i++){
 	    	subPriorityQueue.addElement(new FifoQueue(i));
-	    	System.out.println("subPriorityQueue "+i+" created.");
 	    	subPriorityQueue.get(i).initializer(i);
-	    	System.out.println("time slice "+subPriorityQueue.get(i).timeSlice);
 	    }
 	   
 	}
     	public void waitForAccess(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    getThreadState(thread).waitForAccess(this);
+
+	    if(thread.getPreviousPriority()==thread.getPriority()){
+	    	//priority was not changed
+	    	if (!this.subPriorityQueue.get(thread.getPreviousPriority()).isEmpty()){
+	    		// queue is not empty
+	    		if(this.subPriorityQueue.get(thread.getPreviousPriority()).
+	    												waitQueueHead().getPID()==thread.getPID() ){
+	    			//current thread should be moved to the end of queue, 
+	    			// with unchanged priority.
+	    				//System.out.println("move to end");
+	    				this.subPriorityQueue.get(thread.getPreviousPriority()).removeHead();
+		    			this.subPriorityQueue.get(thread.getPreviousPriority()).waitForAccess(thread);	    			
+	    		}  
+	    		else
+	    			//just add it 
+	    			this.subPriorityQueue.get(thread.getPreviousPriority()).waitForAccess(thread);
+	    	}
+	    	else
+	    		//queue is empty
+	    		//new ready thread
+	    		this.subPriorityQueue.get(thread.getPriority()).waitForAccess(thread);
+	 
+	    	System.out.println("QUEUE OF PRIORITY "+thread.getPreviousPriority()+":");
+	    	this.subPriorityQueue.get(thread.getPreviousPriority()).print();
+	    }
+	    
+	    else{
+	    	//priority was changed 	
+	    	//System.out.println("priority was changed, thread ["+thread.getName()+"] pp="+thread.getPreviousPriority()+" p="+thread.getPriority());
+	    	this.subPriorityQueue.get(thread.getPreviousPriority()).removeHead();
+	    	this.subPriorityQueue.get(thread.getPriority()).waitForAccess(thread);
+	    	
+	    	System.out.println("QUEUE OF PRIORITY "+thread.getPriority()+":");
+	    	this.subPriorityQueue.get(thread.getPriority()).print();
+	    	
+	    	System.out.println("QUEUE OF PREVIOUSPRIORITY "+thread.getPreviousPriority()+":");
+	    	this.subPriorityQueue.get(thread.getPreviousPriority()).print();
+	    }
+	    
 	}
     	public void acquire(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    getThreadState(thread).acquire(this);
+	    Lib.assertTrue(this.isEmpty());
 	}
-
+    	public boolean isEmpty(){
+    		boolean empty=true;
+    		for(int i=0;i<this.subPriorityQueue.size();i++){
+    			empty&=this.subPriorityQueue.get(i).isEmpty();
+    		}
+    		return empty;
+    	}
+    	
     	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me
-	    //TODO:return the next thread to run, remove previous running thread from queue. 
-	    return null;
-	}
+	    	return (KThread) this.subPriorityQueue.get(this.currentHighestPriority()).waitQueueHead();
+    	}
+	    /**
+	     * (1)check whether the current thread is completed by considering the value of totalNeededTimeSlice
+	     * (2)if the thread is completed its work, which is equivalent to totalNeededTimeSlice, then remove it.
+	     * 		else add it to specific subPriorityQueue.
+	     * (3)
+	     */
+	   
 
 	/**
 	 	* Return the next thread that <tt>nextThread()</tt> would return,
@@ -163,24 +155,8 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the next thread that <tt>nextThread()</tt> would
 	 *		return.
 	 */
-    	protected ThreadState pickNextThread() {
-	    // implement me
-    	/**
-    	 * TODO: return the status of next thread to run, including priority
-    	 * 
-    	 * Question: how can we find the next thread to run?
-    	 * (1)get the highest priority from currentHighestPriority()
-    	 * (2)subPriorityQueue.get(i).nextThread()
-    	 * [important]:how can we assure that the next thread will run as we expect?
-    	 * 
-    	 */
-	    return null;
-	    
-	}
-	
     	public void print() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me (if you want)
 	}
 
 	/**
@@ -202,118 +178,14 @@ public class PriorityScheduler extends Scheduler {
     	
     	
     	public int currentHighestPriority(){
-    		int i=subPriorityQueue.size();
-    		while(subPriorityQueue.get(i-1).isEmpty()){
+    		int i=subPriorityQueue.size()-1;
+    		while(subPriorityQueue.get(i).isEmpty() && i>=0){
     			i--;
     		}
+    		//System.out.println("i="+i);
     		return i;
     	}
     }
-    /**
-     * The scheduling state of a thread. This should include the thread's
-     * priority, its effective priority, any objects it owns, and the queue
-     * it's waiting for, if any.
-     *
-     * @see	nachos.threads.KThread#schedulingState
-     */
-    protected class ThreadState {
-	/**
-	 	* Allocate a new <tt>ThreadState</tt> object and associate it with the
-	 * specified thread.
-	 *
-	 * @param	thread	the thread this state belongs to.
-	 */
-    	public ThreadState(KThread thread) {
-	    this.thread = thread;
-	    
-	    setPriority(priorityDefault);
-	}
-
-	/**
-	 	* Return the priority of the associated thread.
-	 *
-	 * @return	the priority of the associated thread.
-	 */
-    	public int getPriority() {
-    		//TODO:maybe getEffectivePriority() should be called here
-	    return priority;
-	}
-
-	/**
-	 	* Return the effective priority of the associated thread.
-	 *
-	 * @return	the effective priority of the associated thread.
-	 */
-    	public int getEffectivePriority() {
-	    // implement me
-    		//TODO: considering priority inversion. However, as we allow preemption here, it might be useless.
-	    return priority;
-	}
-
-	/**
-	 	* Set the priority of the associated thread to the specified value.
-	 *
-	 * @param	priority	the new priority.
-	 */
-    	public void setPriority(int priority) {
-	    if (this.priority == priority)
-		return;
-	    
-	    this.priority = priority;
-	    
-	    // implement me
-	}
-
-	/**
-	 	* Called when <tt>waitForAccess(thread)</tt> (where <tt>thread</tt> is
-	 * the associated thread) is invoked on the specified priority queue.
-	 * The associated thread is therefore waiting for access to the
-	 * resource guarded by <tt>waitQueue</tt>. This method is only called
-	 * if the associated thread cannot immediately obtain access.
-	 *
-	 * @param	waitQueue	the queue that the associated thread is
-	 *				now waiting on.
-	 *
-	 * @see	nachos.threads.ThreadQueue#waitForAccess
-	 */
-    	public void waitForAccess(PriorityQueue waitQueue) {
-	    // implement me
-    		/**
-    		 * TODO:(1)check the priority of thread:
-    		 * 				if higher than running thread, preemption.
-    		 * 				else
-    		 * 					(2)check the existence of subPriorityQueue with certain priority.
-    		 * 						if existed, add the thread into a specific FifoQueue.
-    		 * 						else
-    		 * 							invoke fifoqueue.initializer(specific priority) to create a new fifoQueue
-    		 * 							then add the thread into it.
-    		 * 					(3)after finishing adding, change the attributes of thread(timeslice priority)
-    		 *[warning] Pay attention to idleThread. 
-    		 */
-	}
-
-	/**
-	 	* Called when the associated thread has acquired access to whatever is
-	 * guarded by <tt>waitQueue</tt>. This can occur either as a result of
-	 * <tt>acquire(thread)</tt> being invoked on <tt>waitQueue</tt> (where
-	 * <tt>thread</tt> is the associated thread), or as a result of
-	 * <tt>nextThread()</tt> being invoked on <tt>waitQueue</tt>.
-	 *
-	 * @see	nachos.threads.ThreadQueue#acquire
-	 * @see	nachos.threads.ThreadQueue#nextThread
-	 */
-    	public void acquire(PriorityQueue waitQueue) {
-	    // implement me
-    		Lib.assertTrue(Machine.interrupt().disabled());
-		       //TODO:checking that there is no thread to run.
-    			//maybe we can use fifo.acquire to return sth like all of the subPrioritySchedule return empty
-    		
-    	    //Lib.assertTrue(waitQueue.isEmpty());
-	}	
-
-    	/** The thread with which this object is associated. */	   
-    	protected KThread thread;
-    	/** The priority of the associated thread. */
-    	protected int priority;
-    }
+   
+  
 }

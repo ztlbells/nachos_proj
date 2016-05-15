@@ -41,11 +41,7 @@ public class KThread {
     public KThread(Runnable target) {
     	
     	this();
-    	//System.out.println("run this.");
-    	//System.out.println("target thread created. name:["+this.name+"] status:"+this.status);
     	this.target = target;
-    	//System.out.println("======constructor for "+this.name+"=========");
-    	
         }
     
     /**
@@ -63,11 +59,8 @@ public class KThread {
 	    currentThread = this;
 	    tcb = TCB.currentTCB();
 	    name = "Main";
-	    
-	    //System.out.println("main created. No current thread.");
 	    restoreState();
-	    
-	    
+		    
 	    createIdleThread();
 	}
     }
@@ -78,14 +71,13 @@ public class KThread {
      * @param	target	the object whose <tt>run</tt> method is called.
      */
     public KThread(Runnable target,int originPriority,int totalTimeSlice) {
-    	
+    	//overloading
 	this();
-	//System.out.println("run this.");
-	//System.out.println("target thread created. name:["+this.name+"] status:"+this.status);
 	this.target = target;
-	//System.out.println("======constructor for "+this.name+"=========");
+	
 	this.priority=originPriority;
-	this.totalNeededTimeSlice=totalTimeSlice;
+	this.previousPriority=originPriority;
+
     }
 
     /**
@@ -166,21 +158,23 @@ public class KThread {
 	//tcb.start(target runnable)
 	tcb.start(new Runnable() {
 		public void run() {
-			//System.out.println("[tcb]from tcb.start");
+			
 		    runThread();
 		}
 	    });
-
+	System.out.println("FORK THREAD "+this.name+" WITH PRIORITY "+this.priority);
 	ready();
-	
+	System.out.println("from FORK");
 	Machine.interrupt().restore(intStatus);
     }
 
     private void runThread() {
 	begin();
-	//System.out.println("[fork @runThread.tcb]from tcb.start->runThread."+target.toString());
-	target.run();
+	while(currentThread.getTimeSlice()>0)
+		target.run();
+	System.out.println("STOP RUN THIS THREAD AND TRY TO FINISH IT");
 	finish();
+
     }
 
     private void begin() {
@@ -206,7 +200,7 @@ public class KThread {
     public static void finish() {
 	Lib.debug(dbgThread, "Finishing thread: " + currentThread.toString());
 	
-	//System.out.println("**Finishing thread [" + currentThread.getName()+"] invokes sleep()");
+	System.out.println("**FINISHING THREAD [" + currentThread.getName()+"] ");
 	
 	Machine.interrupt().disable();
 
@@ -239,61 +233,32 @@ public class KThread {
      */
     public static void yield() {
 	Lib.debug(dbgThread, "Yielding thread: " + currentThread.toString());
-	
 	Lib.assertTrue(currentThread.status == statusRunning);
-	
-	boolean intStatus = Machine.interrupt().disable();
-	//output
-	System.out.println("YIELD ["+currentThread.name+"]");
-	 //System.out.println("yield thread [" +currentThread.getName()+"] and "+currentThread.getTimeSlice()+ " time slices left");
-	 //System.out.println("yield thread [" +currentThread.getName()+"] and status:"+currentThread.status+ " ");
-	 
-		
 	/*
 	 * If a thread always invokes yield(), we can come to the conclusion that this thread is I/O intensive, 
 	 * thus, we are supposed to raise up its priority, assuming that the priority of next thread is not higher
 	 * than current one.
 	 * 
 	 * In yield(), we will raise up current thread's priority. But we cannot forget to initialize its time slice
-	 * before invoking tcb.contextSwith().
+	 * before invoking tcb.contextSwith(). We finish above in ready().
 	 */
-	currentThread.ready();
-	
-	/*
-	 * Clarify the reason why yield() was invoked: preempted by next thread or invoked by current thread itself.
-	 * if for preemption, do nothing
-	 * otherwise, raise up priority
-	 */
-	//if(readyQueue.nextThread().priority > currentThread.priority){
-		//TODO: it seems that we cannot use nextThread like this here, because in roundrobinScheduler, 
-		//function nextThread() will remove the head of queue.
-		//Lib.debug(dbgThread,???
-		
-	//}
-	//else{
-		//raise up priority
-		//if(currentThread.timeSlice!=0){
-			//currentThread.setPriority(++currentThread.priority);
-			
-			/*System.out.println("[!]priority changed.");
-			System.out.println("now the current thread ["+currentThread.name+"] with priority="+currentThread.priority);*/
-			//Lib.debug(dbgThread,???
-		//}
-		//TODO
-		//Lib.debug(dbgThread,???
-	//}
-	//output
-	 //System.out.println(" now yield thread [" +currentThread.getName()+"] and status:"+currentThread.status+ " ");
-	 //System.out.println("*yield run runNextThread()");
-	 
-	
-	//Initialize time slice before switch.
-	//currentThread.resetTimeSlice();
-	//System.out.println("-----yield ending------");
+	boolean intStatus = Machine.interrupt().disable();
+	System.out.println("YIELD ["+currentThread.name+"]");
+	currentThread.previousPriority=currentThread.priority;
+	if(currentThread.timeSlice>0 ){
+		//preempted
+		if (currentThread.setPriority(currentThread.priority+1))
+			System.out.println(currentThread.name+" WAS PREEMPTED, PRIORITY WAS INCREASED "
+					+ "TO "+currentThread.priority);
+		}	
+	else{
+		if (currentThread.setPriority(currentThread.priority-1))
+			System.out.println(currentThread.name+" WAS NOT PREEMPTED, PRIORITY WAS DECREASED "
+					+ "TO "+currentThread.priority);
+		}
+	currentThread.ready();	
 	runNextThread();
-		
-	Machine.interrupt().restore(intStatus);
-	
+	Machine.interrupt().restore(intStatus);	
     }
 
     /**
@@ -312,12 +277,7 @@ public class KThread {
 	
 	Lib.assertTrue(Machine.interrupt().disabled());
 	//output
-	 System.out.println("->sleep invokes runNextThread(), current thread ["+currentThread.name+"] will be blocked.");
-	 //System.out.println("---");
-	// System.out.println("["+currentThread.name+"]");
-	 //System.out.println("|");
-	 System.out.println("next :["+readyQueue.nextThread().getName()+"]");
-	 
+	 System.out.println("["+currentThread.name+"] SLEPT");
 	/*
 	 * What we will do in sleep is very similar to what we have done in yield.
 	 * In many cases, the reason why a thread calls sleep() is waiting for resource. Hence, we can classify 
@@ -328,15 +288,15 @@ public class KThread {
 	 */
 	if (currentThread.status != statusFinished)
 	    currentThread.status = statusBlocked;
+	else{
+		//finished
+		//remove it from ready queue
+		System.out.println("finished");
+		readyQueue.waitForAccess(currentThread);
+	}
 	
-	//if(currentThread.timeSlice!=0){
-		//raise up priority
-		//currentThread.setPriority(++currentThread.priority);
-		//System.out.println("[!]priority changed.");
-		//TODO
-		//Lib.debug(dbgThread, ???
-	//}
-	//currentThread.resetTimeSlice();
+	
+		
 	runNextThread();
     }
 
@@ -350,21 +310,19 @@ public class KThread {
 	Lib.assertTrue(Machine.interrupt().disabled());
 	Lib.assertTrue(status != statusReady);
 	
+	
+	
 	status = statusReady;
 	if (this != idleThread){
-		//TODO
-		System.out.println( "["+this.name+"] READY ");
+		System.out.println( "["+this.name+"] READY WITH PRIORITY "+this.priority);
 		readyQueue.waitForAccess(this);
 	}
-	    
-	//TODO
-	//System.out.println("["+this.name+"] status:"+this.status);
+
 	Machine.autoGrader().readyThread(this);
 	/**Important: Assuming that the priority of running thread is highest, 
 	 * 				so id a new thread is ready, the only thing we are supposed 
 	 * 				to do is comparing the priority of current thread and ready thread,
 	 * 				when checking the possibility of preemption.
-	 *TODO: checking the possibility of preemption.
 	 */
     }
 
@@ -394,10 +352,10 @@ public class KThread {
 	Lib.assertTrue(idleThread == null);
 	
 	idleThread = new KThread(new Runnable() {
+		//in order to avoid running idle thread, we set its priority as -1.
 	    public void run() { while (true) yield(); }
 	},-1,-1);
 	idleThread.setName("idle");
-	//System.out.println("idle thread created.");
 	Machine.autoGrader().setIdleThread(idleThread);
 	
 	idleThread.fork();
@@ -408,13 +366,19 @@ public class KThread {
      * using <tt>run()</tt>.
      */
     private static void runNextThread() {
+    	/**
+	     * (1)check whether the current thread is completed by considering the value of totalNeededTimeSlice
+	     * (2)if the thread is completed its work, which is equivalent to totalNeededTimeSlice, then remove it.
+	     * 		else add it to specific subPriorityQueue.
+	     * (3)get the nextThread from readyQueue.nextThread() to run
+	     */	
+    	
 	KThread nextThread = readyQueue.nextThread();
 	
 	if (nextThread == null)
 	    nextThread = idleThread;
-	//System.out.println("curr:"+currentThread.name);
 	System.out.println("SWITCH TO THREAD [" +nextThread.name+"] ");
-	nextThread.run();
+		nextThread.run();
 	
     }
 
@@ -440,18 +404,13 @@ public class KThread {
      */
     private void run() {
 	Lib.assertTrue(Machine.interrupt().disabled());
-
 	Machine.yield();
-
 	currentThread.saveState();
-
 	Lib.debug(dbgThread, "Switching from: " + currentThread.toString()
 		  + " to: " + toString());
 
 	currentThread = this;
-
 	tcb.contextSwitch();
-
 	currentThread.restoreState();
     }
 
@@ -467,7 +426,6 @@ public class KThread {
 	Lib.assertTrue(tcb == TCB.currentTCB());
 
 	Machine.autoGrader().runningThread(this);
-	//System.out.println("RestoreState():run ["+this.name+"]");
 	status = statusRunning;
 
 	if (toBeDestroyed != null) {
@@ -488,71 +446,45 @@ public class KThread {
 
     
     private static class PingTest implements Runnable {
-    	//TODO
     	//test class 
-	PingTest(int which) {
+	PingTest(String which) {
 	    this.which = which;
-	    //System.out.println("pingtest "+which+" created.");
 	}
 	
 	public void run() {
-	   
-		currentThread.yield();
+		System.out.println("RUN PING "+which);
+		while(currentThread.timeSlice>0){
+			//call tick();				
+			Machine.interrupt().tick(true);	
+		}
+			currentThread.yield();
 	}
 
-	private int which;
+	private String which;
     }
     
    
     /**
      * Tests whether this module is working.
      */
-    
+    public static void newSelfTest(){
+    	//fork dummy thread..
+    	new KThread(new PingTest("dummy"),5,30).setName("dummy").fork();
+    }
     
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
-	//TODO
-	//new KThread(new PingTest(0)).setName("Duplicate Main").fork();
+
 	
+	System.out.println("------------------------selftest()------------------------");
 	
-	System.out.println("------------------------welcome to selftest!------------------------");
-	KThread thread1 = new KThread(new Runnable(){
-		public void run(){
-			//TODO:priority changed, with timeslice changed.
-			System.out.println("RUN THREAD [thread1]");
-			while(currentThread.timeSlice>0){
-				//call tick();
-				
-				Machine.interrupt().enable();			
-				Machine.interrupt().disable();
-				System.out.println("TIMESLICE OF [thread1] NOW IS "+currentThread.timeSlice);
-			}
-			currentThread.yield();
-		}
+	new KThread(new PingTest("one"),5,30).setName("one").fork();
+	new KThread(new PingTest("two"),5,40).setName("two").fork();
+	new KThread(new PingTest("three"),3,20).setName("three").fork();
+	new PingTest("zero").run();
+
 	
-	},1,100);
-	
-	KThread thread2 = new KThread(new Runnable(){
-		public void run(){
-			System.out.println("RUN THREAD [thread2]");
-			while(currentThread.timeSlice>0){
-				//call tick();
-				//currentThread.timeSlice is determined by priority
-				
-				Machine.interrupt().enable();				
-				Machine.interrupt().disable();
-				System.out.println("TIMESLICE OF [thread2] NOW IS "+currentThread.timeSlice);
-			}
-			currentThread.yield();
-		}
-	},1,50);
-	
-	thread2.setName("thread2").fork();
-	thread1.setName("thread1").fork();
-	//new PingTest(1).run();
-	
-	//priorityTest();
-	System.out.println("------------------------Bye selftest!------------------------");
+	System.out.println("------------------------EOF------------------------");
 	
 	
     }
@@ -566,21 +498,30 @@ public class KThread {
      */
     public Object schedulingState = null;
     
-    //TODO 
-    //@param priority for priorityScheduler
-    //default priority of every thread is 1
-    private int priority=1;
+    //@param priority for priorityScheduler. default priority of every thread is 1
+    private int priority;
+    private int previousPriority;
     
     //some functions for priority
     //set function
-    public void setPriority(int newPriority){
-    	priority=newPriority;
+    public boolean setPriority(int newPriority){
+    	if(newPriority>=0 && newPriority<=7){
+    		priority=newPriority;
+    		return true;
+    	}
+    	else
+    		return false;
     }
     
-    //TODO
+    public int getPreviousPriority(){
+    	return previousPriority;
+    }
+    
+    public int getPriority(){
+    	return priority;
+    }
     
     private int timeSlice;
-    private int totalNeededTimeSlice;
     //some functions for timeSlice
     //set function
     
@@ -594,19 +535,21 @@ public class KThread {
     	timeSlice=Stats.KernelTick*5;
     }
     
-    //TODO
-    public void changeSliceAndPriority(int newPriority){
-    	
-    }
+    
     //sub time slice function
     public int subTimeSlice(){
-    	if(timeSlice>0){
+    	if(timeSlice>0 ){
     		timeSlice-=Stats.KernelTick;
-    		//System.out.println("[Sub time slice]---[ "+currentThread.getName()+"] with time slice "+ currentThread.getTimeSlice());
-        	return timeSlice;
+    		System.out.println("THREAD ["+currentThread.getName()+"] HAS ONLY "
+    										+ currentThread.timeSlice+" TICKS LEFT");
+    		return timeSlice;
     	}
-    	// time slice depleted
+    	// time slice is depleted
     	else return -1;
+    }
+    
+    public int getPID(){
+    	return this.id;
     }
 
     private static final int statusNew = 0;
@@ -626,7 +569,7 @@ public class KThread {
     private TCB tcb;
 
     /**
-     * Unique identifer for this thread. Used to deterministically compare
+     * Unique identifier for this thread. Used to deterministically compare
      * threads.
      */
     private int id = numCreated++;
